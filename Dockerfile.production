@@ -1,0 +1,153 @@
+# Production-optimized Dockerfile for ParalegalAI
+# This Dockerfile is optimized for production deployment with security and performance considerations
+
+# Stage 1: Build Frontend
+FROM node:18-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Copy package files
+COPY frontend/package.json frontend/yarn.lock ./
+
+# Install dependencies with frozen lockfile
+RUN yarn install --frozen-lockfile --production=false
+
+# Copy source code
+COPY frontend/ ./
+
+# Build frontend
+RUN yarn build
+
+# Stage 2: Build Dependencies
+FROM node:18-alpine AS deps
+
+# Install system dependencies for building native modules
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json yarn.lock ./
+COPY server/package.json ./server/
+COPY collector/package.json ./collector/
+
+# Install all dependencies
+RUN yarn install --frozen-lockfile --production=false
+
+# Install server dependencies
+WORKDIR /app/server
+RUN yarn install --frozen-lockfile --production=false
+
+# Install collector dependencies
+WORKDIR /app/collector
+RUN yarn install --frozen-lockfile --production=false
+
+# Stage 3: Production Image
+FROM node:18-alpine AS production
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S paralegal -u 1001
+
+# Install system dependencies
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    dumb-init \
+    && rm -rf /var/cache/apk/*
+
+# Set Puppeteer to use Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# Create app directory
+WORKDIR /app
+
+# Copy built dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/server/node_modules ./server/node_modules
+COPY --from=deps /app/collector/node_modules ./collector/node_modules
+
+# Copy source code
+COPY package.json yarn.lock ./
+COPY server/ ./server/
+COPY collector/ ./collector/
+
+# Copy built frontend from frontend-builder stage
+COPY --from=frontend-builder /app/frontend/dist ./server/public
+
+# Create storage directory and set permissions
+RUN mkdir -p /app/server/storage && \
+    chown -R paralegal:nodejs /app
+
+# Switch to non-root user
+USER paralegal
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV STORAGE_DIR=/app/server/storage
+ENV ANYTHING_LLM_RUNTIME=docker
+
+# Expose ports
+EXPOSE 3001 8888
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/ping || exit 1
+
+# Create startup script
+RUN cat > /app/start.sh << 'EOF'
+#!/bin/sh
+set -e
+
+# Set environment variables
+export NODE_ENV=production
+export STORAGE_DIR=/app/server/storage
+export ANYTHING_LLM_RUNTIME=docker
+
+# Wait for storage directory to be ready
+while [ ! -d "/app/server/storage" ]; do
+    echo "Waiting for storage directory..."
+    sleep 1
+done
+
+# Generate Prisma client
+echo "Generating Prisma client..."
+cd /app/server
+npx prisma generate --schema=./prisma/schema.prisma
+
+# Run database migrations
+echo "Running database migrations..."
+npx prisma migrate deploy --schema=./prisma/schema.prisma
+
+# Start collector in background
+echo "Starting collector service..."
+cd /app/collector
+node index.js &
+COLLECTOR_PID=$!
+
+# Start server
+echo "Starting main server..."
+cd /app/server
+node index.js &
+SERVER_PID=$!
+
+# Wait for either process to exit
+wait $SERVER_PID $COLLECTOR_PID
+EOF
+
+RUN chmod +x /app/start.sh
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["/app/start.sh"]
+

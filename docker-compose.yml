@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  paralegal-ai:
+    build: .
+    container_name: paralegal-ai
+    ports:
+      - "3001:3001"
+      - "8888:8888"
+    environment:
+      - NODE_ENV=production
+      - STORAGE_DIR=/app/server/storage
+      - ANYTHING_LLM_RUNTIME=docker
+      # Add your environment variables here
+      - LLM_PROVIDER=openai
+      - OPEN_AI_KEY=${OPEN_AI_KEY:-}
+      - OPEN_MODEL_PREF=${OPEN_MODEL_PREF:-gpt-4}
+      - EMBEDDING_MODEL_PREF=${EMBEDDING_MODEL_PREF:-text-embedding-3-small}
+      - VECTOR_DB=${VECTOR_DB:-lancedb}
+      - MULTI_USER_MODE=${MULTI_USER_MODE:-false}
+      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-false}
+    volumes:
+      - paralegal_data:/app/server/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  paralegal_data:
+    driver: local
+

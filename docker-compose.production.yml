@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  paralegal-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: paralegal-ai-prod
+    ports:
+      - "3001:3001"
+      - "8888:8888"
+    environment:
+      - NODE_ENV=production
+      - STORAGE_DIR=/app/server/storage
+      - ANYTHING_LLM_RUNTIME=docker
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPEN_AI_KEY=${OPEN_AI_KEY}
+      - OPEN_MODEL_PREF=${OPEN_MODEL_PREF:-gpt-4}
+      - EMBEDDING_MODEL_PREF=${EMBEDDING_MODEL_PREF:-text-embedding-3-small}
+      - VECTOR_DB=${VECTOR_DB:-lancedb}
+      - MULTI_USER_MODE=${MULTI_USER_MODE:-false}
+      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-false}
+      - JWT_EXPIRY=${JWT_EXPIRY:-24h}
+      - COMMUNITY_HUB_BUNDLE_DOWNLOADS_ENABLED=${COMMUNITY_HUB_BUNDLE_DOWNLOADS_ENABLED:-true}
+      - COLLECTOR_ALLOW_ANY_IP=${COLLECTOR_ALLOW_ANY_IP:-true}
+    volumes:
+      - paralegal_data:/app/server/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
+      - /var/tmp
+
+  # Optional: Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: paralegal-ai-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - paralegal-ai
+    restart: unless-stopped
+    profiles:
+      - with-nginx
+
+volumes:
+  paralegal_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+
