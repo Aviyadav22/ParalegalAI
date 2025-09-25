@@ -434,6 +434,12 @@ const SystemSettings = {
       ChromaCloudTenant: process.env.CHROMACLOUD_TENANT,
       ChromaCloudDatabase: process.env.CHROMACLOUD_DATABASE,
 
+      // Chroma Multi-Instance DB Keys
+      ChromaEndpoints: process.env.CHROMA_ENDPOINTS,
+      ChromaBatchSize: process.env.CHROMA_BATCH_SIZE,
+      ChromaMaxConcurrentBatches: process.env.CHROMA_MAX_CONCURRENT_BATCHES,
+      ChromaNodeCount: process.env.CHROMA_NODE_COUNT,
+
       // Weaviate DB Keys
       WeaviateEndpoint: process.env.WEAVIATE_ENDPOINT,
       WeaviateApiKey: process.env.WEAVIATE_API_KEY,

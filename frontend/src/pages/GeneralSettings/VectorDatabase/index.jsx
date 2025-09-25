@@ -25,6 +25,7 @@ import PGVectorLogo from "@/media/vectordbs/pgvector.png";
 import LanceDBOptions from "@/components/VectorDBSelection/LanceDBOptions";
 import ChromaDBOptions from "@/components/VectorDBSelection/ChromaDBOptions";
 import ChromaCloudOptions from "@/components/VectorDBSelection/ChromaCloudOptions";
+import ChromaMultiOptions from "@/components/VectorDBSelection/ChromaMultiOptions";
 import PineconeDBOptions from "@/components/VectorDBSelection/PineconeDBOptions";
 import WeaviateDBOptions from "@/components/VectorDBSelection/WeaviateDBOptions";
 import QDrantDBOptions from "@/components/VectorDBSelection/QDrantDBOptions";
@@ -141,6 +142,14 @@ export default function GeneralVectorDatabase() {
       options: <ChromaCloudOptions settings={settings} />,
       description:
         "Fully managed Chroma cloud service with enterprise features and support.",
+    },
+    {
+      name: "Chroma Multi-Instance",
+      value: "chroma-multi",
+      logo: ChromaLogo,
+      options: <ChromaMultiOptions settings={settings} />,
+      description:
+        "Multiple ChromaDB instances with round-robin distribution and batch processing for high availability and scalability.",
     },
     {
       name: "Pinecone",

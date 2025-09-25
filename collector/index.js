@@ -15,8 +15,12 @@ const { wipeCollectorStorage } = require("./utils/files");
 const extensions = require("./extensions");
 const { processRawText } = require("./processRawText");
 const { verifyPayloadIntegrity } = require("./middleware/verifyIntegrity");
+const { BatchProcessor } = require("./utils/batchProcessor");
 const app = express();
 const FILE_LIMIT = "3GB";
+
+// Initialize batch processor
+const batchProcessor = new BatchProcessor();
 
 app.use(cors({ origin: true }));
 app.use(
@@ -162,6 +166,81 @@ app.post(
     return;
   }
 );
+
+// 🚀 BATCH PROCESSING ENDPOINT FOR MULTI-INSTANCE CHROMADB
+app.post(
+  "/process-batch",
+  [verifyPayloadIntegrity],
+  async function (request, response) {
+    const { documents = [], options = {} } = reqBody(request);
+    
+    try {
+      if (!documents || documents.length === 0) {
+        return response.status(400).json({
+          success: false,
+          reason: "No documents provided for batch processing",
+          results: []
+        });
+      }
+
+      console.log(`🔄 Starting batch processing of ${documents.length} documents`);
+      
+      // Split documents into batches
+      const batches = batchProcessor.splitIntoBatches(documents, options.batchSize);
+      console.log(`📦 Split into ${batches.length} batches`);
+      
+      // Process all batches
+      const results = await batchProcessor.processMultipleBatches(batches, options);
+      
+      // Calculate statistics
+      const totalProcessed = results.successful.reduce((sum, batch) => sum + batch.totalProcessed, 0);
+      const totalFailed = results.successful.reduce((sum, batch) => sum + batch.totalFailed, 0);
+      
+      console.log(`✅ Batch processing completed: ${totalProcessed} successful, ${totalFailed} failed`);
+      
+      response.status(200).json({
+        success: true,
+        reason: `Batch processing completed: ${totalProcessed} documents processed successfully`,
+        results: {
+          totalDocuments: documents.length,
+          totalProcessed,
+          totalFailed,
+          batchesProcessed: results.successfulBatches,
+          batchesFailed: results.failedBatches,
+          batchResults: results.successful,
+          errors: results.failed,
+          stats: batchProcessor.getStats()
+        }
+      });
+      
+    } catch (e) {
+      console.error("❌ Batch processing error:", e);
+      response.status(500).json({
+        success: false,
+        reason: "Batch processing failed: " + e.message,
+        results: []
+      });
+    }
+    return;
+  }
+);
+
+// 📊 BATCH PROCESSOR STATISTICS ENDPOINT
+app.get("/batch-stats", async function (request, response) {
+  try {
+    const stats = batchProcessor.getStats();
+    response.status(200).json({
+      success: true,
+      stats
+    });
+  } catch (e) {
+    console.error("Error getting batch stats:", e);
+    response.status(500).json({
+      success: false,
+      reason: "Failed to get batch statistics"
+    });
+  }
+});
 
 extensions(app);
 

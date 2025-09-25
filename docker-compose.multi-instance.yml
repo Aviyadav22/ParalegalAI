@@ -1,12 +1,12 @@
-# Production Multi-node ChromaDB setup for ParalegalAI
-# docker-compose.production.yml
+# Multi-node ChromaDB setup for ParalegalAI
+# docker-compose.multi-instance.yml
 version: '3.8'
 
 services:
   # ChromaDB Node 1 - Legal Cases
   chromadb-1:
     image: chromadb/chroma:latest
-    container_name: chromadb-1-prod
+    container_name: chromadb-1
     ports:
       - "8001:8000"
     environment:
@@ -15,7 +15,7 @@ services:
       - IS_PERSISTENT=TRUE
       - CHROMA_NODE_ID=node-1
     volumes:
-      - chromadb_data_1:/data
+      - ./chromadb-data-1:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/"]
@@ -23,13 +23,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    networks:
-      - paralegal_network
 
   # ChromaDB Node 2 - Contracts
   chromadb-2:
     image: chromadb/chroma:latest
-    container_name: chromadb-2-prod
+    container_name: chromadb-2
     ports:
       - "8002:8000"
     environment:
@@ -38,7 +36,7 @@ services:
       - IS_PERSISTENT=TRUE
       - CHROMA_NODE_ID=node-2
     volumes:
-      - chromadb_data_2:/data
+      - ./chromadb-data-2:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/"]
@@ -46,13 +44,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    networks:
-      - paralegal_network
 
   # ChromaDB Node 3 - Statutes & Regulations
   chromadb-3:
     image: chromadb/chroma:latest
-    container_name: chromadb-3-prod
+    container_name: chromadb-3
     ports:
       - "8003:8000"
     environment:
@@ -61,7 +57,7 @@ services:
       - IS_PERSISTENT=TRUE
       - CHROMA_NODE_ID=node-3
     volumes:
-      - chromadb_data_3:/data
+      - ./chromadb-data-3:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/"]
@@ -69,13 +65,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    networks:
-      - paralegal_network
 
   # Load Balancer (Nginx)
   chromadb-lb:
     image: nginx:alpine
-    container_name: chromadb-lb-prod
+    container_name: chromadb-lb
     ports:
       - "8000:80"
     volumes:
@@ -85,38 +79,11 @@ services:
       - chromadb-2
       - chromadb-3
     restart: unless-stopped
-    networks:
-      - paralegal_network
-
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: postgres-prod
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB:-paralegal_ai}
-      - POSTGRES_USER=${POSTGRES_USER:-paralegal_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    networks:
-      - paralegal_network
-
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: redis-prod
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    networks:
-      - paralegal_network
 
   # ParalegalAI with Multi-Instance Support
   paralegal-ai:
     build: .
-    container_name: paralegal-ai-prod
+    container_name: paralegal-ai
     ports:
       - "80:3001"
       - "443:8888"
@@ -132,40 +99,27 @@ services:
       # LLM Configuration
       - LLM_PROVIDER=gemini
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_LLM_MODEL_PREF=${GEMINI_LLM_MODEL_PREF:-gemini-2.0-flash-lite}
+      - GEMINI_MODEL_PREF=gemini-1.5-pro
       - EMBEDDING_MODEL_PREF=embedding-001
       - DISABLE_NATIVE_EMBEDDINGS=true
       - FORCE_EMBEDDING_PROVIDER=gemini
       - EMBEDDING_ENGINE=gemini
-      # Database Configuration
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      # Redis Configuration
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
-      # Security Configuration
+      # Other settings
       - MULTI_USER_MODE=${MULTI_USER_MODE:-false}
-      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-true}
-      - JWT_SECRET=${JWT_SECRET}
+      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-false}
+      - JWT_SECRET=${JWT_SECRET:-mu8aL6T9Lqz1XWeQrnplGcY/CEpS207NBJtTJXqeX4s=}
       - JWT_EXPIRY=${JWT_EXPIRY:-24h}
-      - SIG_KEY=${SIG_KEY}
-      - SIG_SALT=${SIG_SALT}
-      - CORS_ORIGINS=${CORS_ORIGINS}
+      - SIG_KEY=${SIG_KEY:-1Y2ua8QGdUTDdoy4OCpIew==}
+      - SIG_SALT=${SIG_SALT:-1Y2ua8QGdUTDdoy4OCpIew==}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://yourdomain.com}
       - CORS_CREDENTIALS=${CORS_CREDENTIALS:-true}
-      # Performance Configuration
-      - CHROMA_MAX_CONNECTIONS=${CHROMA_MAX_CONNECTIONS:-50}
-      - CHROMA_CONNECTION_TIMEOUT=${CHROMA_CONNECTION_TIMEOUT:-10000}
-      - CHROMA_REQUEST_TIMEOUT=${CHROMA_REQUEST_TIMEOUT:-30000}
-      # Monitoring
-      - SENTRY_DSN=${SENTRY_DSN}
     volumes:
       - paralegal_data:/app/server/storage
-      - ./ssl:/app/ssl:ro
     depends_on:
       - chromadb-1
       - chromadb-2
       - chromadb-3
       - chromadb-lb
-      - postgres
-      - redis
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/ping"]
@@ -173,39 +127,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    networks:
-      - paralegal_network
-
-  # Nginx Reverse Proxy with SSL
-  nginx:
-    image: nginx:alpine
-    container_name: nginx-prod
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - paralegal-ai
-    restart: unless-stopped
-    networks:
-      - paralegal_network
 
 volumes:
   paralegal_data:
     driver: local
-  chromadb_data_1:
-    driver: local
-  chromadb_data_2:
-    driver: local
-  chromadb_data_3:
-    driver: local
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
 
-networks:
-  paralegal_network:
-    driver: bridge

@@ -346,6 +346,24 @@ const KEY_MAPPING = {
     checks: [isNotEmpty],
   },
 
+  // Chroma Multi-Instance Options
+  ChromaEndpoints: {
+    envKey: "CHROMA_ENDPOINTS",
+    checks: [isNotEmpty],
+  },
+  ChromaBatchSize: {
+    envKey: "CHROMA_BATCH_SIZE",
+    checks: [isNotEmpty],
+  },
+  ChromaMaxConcurrentBatches: {
+    envKey: "CHROMA_MAX_CONCURRENT_BATCHES",
+    checks: [isNotEmpty],
+  },
+  ChromaNodeCount: {
+    envKey: "CHROMA_NODE_COUNT",
+    checks: [isNotEmpty],
+  },
+
   // Weaviate Options
   WeaviateEndpoint: {
     envKey: "WEAVIATE_ENDPOINT",
@@ -875,6 +893,7 @@ function supportedVectorDB(input = "") {
   const supported = [
     "chroma",
     "chromacloud",
+    "chroma-multi",
     "pinecone",
     "lancedb",
     "weaviate",
