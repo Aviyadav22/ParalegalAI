@@ -130,8 +130,23 @@ function systemEndpoints(app) {
           return;
         }
 
-        const { username, password } = reqBody(request);
-        const existingUser = await User._get({ username: String(username) });
+        const { username, email, password } = reqBody(request);
+        
+        // Support both username and email login
+        let existingUser;
+        if (email) {
+          existingUser = await User._get({ email: String(email).toLowerCase() });
+        } else if (username) {
+          existingUser = await User._get({ username: String(username) });
+        } else {
+          response.status(200).json({
+            user: null,
+            valid: false,
+            token: null,
+            message: "[001] Username or email is required.",
+          });
+          return;
+        }
 
         if (!existingUser) {
           await EventLogs.logEvent(

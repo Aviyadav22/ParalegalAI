@@ -14,6 +14,7 @@ const { EventLogs } = require("./eventLogs");
 
 const User = {
   usernameRegex: new RegExp(/^[a-z0-9_\-.]+$/),
+  emailRegex: new RegExp(/^[^\s@]+@[^\s@]+\.[^\s@]+$/),
   writable: [
     // Used for generic updates so we can validate keys in request body
     "username",
@@ -81,10 +82,12 @@ const User = {
 
   create: async function ({
     username,
+    email,
     password,
     role = "default",
     dailyMessageLimit = null,
     bio = "",
+    emailVerified = false,
   }) {
     const passwordCheck = this.checkPasswordComplexity(password);
     if (!passwordCheck.checkedOK) {
@@ -92,22 +95,50 @@ const User = {
     }
 
     try {
-      // Do not allow new users to bypass validation
-      if (!this.usernameRegex.test(username))
+      // Validate email if provided
+      if (email && !this.isValidEmail(email)) {
+        throw new Error("Invalid email format");
+      }
+
+      // Validate username if provided
+      if (username && !this.usernameRegex.test(username)) {
         throw new Error(
           "Username must only contain lowercase letters, periods, numbers, underscores, and hyphens with no spaces"
         );
+      }
+
+      // Check if email already exists
+      if (email) {
+        const existingUser = await prisma.users.findFirst({
+          where: { email: email.toLowerCase() },
+        });
+        if (existingUser) {
+          throw new Error("Email already registered");
+        }
+      }
+
+      // Check if username already exists
+      if (username) {
+        const existingUser = await prisma.users.findFirst({
+          where: { username },
+        });
+        if (existingUser) {
+          throw new Error("Username already taken");
+        }
+      }
 
       const bcrypt = require("bcrypt");
       const hashedPassword = bcrypt.hashSync(password, 10);
       const user = await prisma.users.create({
         data: {
-          username: this.validations.username(username),
+          username: username ? this.validations.username(username) : null,
+          email: email ? email.toLowerCase() : null,
           password: hashedPassword,
           role: this.validations.role(role),
           bio: this.validations.bio(bio),
           dailyMessageLimit:
             this.validations.dailyMessageLimit(dailyMessageLimit),
+          email_verified: emailVerified,
         },
       });
       return { user: this.filterFields(user), error: null };
@@ -304,6 +335,10 @@ const User = {
     }
 
     return { checkedOK: true, error: "No error." };
+  },
+
+  isValidEmail: function (email) {
+    return this.emailRegex.test(email);
   },
 
   /**

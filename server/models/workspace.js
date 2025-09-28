@@ -206,6 +206,23 @@ const Workspace = {
       // If creating with an admin User it wont change anything because admins can
       // view all workspaces anyway.
       if (!!creatorId) await WorkspaceUser.create(creatorId, workspace.id);
+      
+      // Auto-enroll all existing users in the new workspace
+      try {
+        const allUsers = await prisma.users.findMany({
+          select: { id: true }
+        });
+        
+        if (allUsers.length > 0) {
+          const userIds = allUsers.map(user => user.id);
+          await WorkspaceUser.createManyUsers(userIds, workspace.id);
+          console.log(`Auto-enrolled ${userIds.length} users in new workspace: ${workspace.name}`);
+        }
+      } catch (error) {
+        console.error("Failed to auto-enroll users in new workspace:", error);
+        // Don't fail workspace creation if user enrollment fails
+      }
+      
       return { workspace, message: null };
     } catch (error) {
       console.error(error.message);

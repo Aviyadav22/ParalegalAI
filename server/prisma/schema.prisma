@@ -60,11 +60,13 @@ model system_settings {
 model users {
   id                          Int                           @id @default(autoincrement())
   username                    String?                       @unique
+  email                       String?                       @unique
   password                    String
   pfpFilename                 String?
   role                        String                        @default("default")
   suspended                   Int                           @default(0)
   seen_recovery_codes         Boolean?                      @default(false)
+  email_verified              Boolean                       @default(false)
   createdAt                   DateTime                      @default(now())
   lastUpdatedAt               DateTime                      @default(now())
   dailyMessageLimit           Int?
@@ -84,6 +86,20 @@ model users {
   prompt_history              prompt_history[]
   desktop_mobile_devices      desktop_mobile_devices[]
   workspace_parsed_files      workspace_parsed_files[]
+  email_verification_tokens   email_verification_tokens[]
+}
+
+model email_verification_tokens {
+  id        Int      @id @default(autoincrement())
+  user_id   Int
+  token     String   @unique
+  email     String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([token])
 }
 
 model recovery_codes {
