@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: paralegalai-postgres
+    environment:
+      POSTGRES_USER: paralegalai_user
+      POSTGRES_PASSWORD: paralegalai_pass
+      POSTGRES_DB: paralegalai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paralegalai_user -d paralegalai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: paralegalai-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    restart: unless-stopped
+
+  # Document Collector Service
+  collector:
+    build:
+      context: ./collector
+      dockerfile: Dockerfile
+    container_name: paralegalai-collector
+    environment:
+      NODE_ENV: production
+      STORAGE_DIR: /app/storage
+      DATABASE_URL: postgresql://paralegalai_user:paralegalai_pass@postgres:5432/paralegalai
+      STORAGE_MODE: azure
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
+      AZURE_STORAGE_CONTAINER_NAME: ${AZURE_STORAGE_CONTAINER_NAME:-original-case-files}
+      AZURE_STORAGE_METADATA_CONTAINER_NAME: ${AZURE_STORAGE_METADATA_CONTAINER_NAME:-original-case-files-metadata}
+    volumes:
+      - collector_storage:/app/storage
+    ports:
+      - "8888:8888"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Backend Server
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: paralegalai-server
+    environment:
+      NODE_ENV: production
+      SERVER_PORT: 3001
+      STORAGE_DIR: /app/storage
+      
+      # Database
+      DATABASE_URL: postgresql://paralegalai_user:paralegalai_pass@postgres:5432/paralegalai
+      POSTGRES_CONNECTION_STRING: postgresql://paralegalai_user:paralegalai_pass@postgres:5432/paralegalai
+      
+      # Azure Blob Storage
+      STORAGE_MODE: azure
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
+      AZURE_STORAGE_CONTAINER_NAME: ${AZURE_STORAGE_CONTAINER_NAME:-original-case-files}
+      AZURE_STORAGE_METADATA_CONTAINER_NAME: ${AZURE_STORAGE_METADATA_CONTAINER_NAME:-original-case-files-metadata}
+      
+      # Vector Database
+      VECTOR_DB: qdrant
+      QDRANT_ENDPOINT: http://qdrant:6333
+      
+      # LLM Provider (Gemini)
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_LLM_MODEL_PREF: gemini-2.5-pro
+      
+      # Embeddings (Gemini)
+      EMBEDDING_ENGINE: gemini
+      GEMINI_EMBEDDING_API_KEY: ${GEMINI_API_KEY}
+      EMBEDDING_MODEL_PREF: embedding-001
+      
+      # Security
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-key-in-production}
+      SIG_KEY: ${SIG_KEY:-change-this-signature-key-min-32-chars}
+      SIG_SALT: ${SIG_SALT:-change-this-salt-key-min-32-chars}
+      
+      # Collector Connection
+      COLLECTOR_HOST: collector
+      COLLECTOR_PORT: 8888
+      COLLECTOR_PROTOCOL: http
+      
+      # Optional Features
+      RERANKER_PROVIDER: gemini
+      WHISPER_PROVIDER: local
+      TTS_PROVIDER: native
+    volumes:
+      - server_storage:/app/storage
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      collector:
+        condition: service_started
+    restart: unless-stopped
+
+  # Frontend (React)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:3001/api}
+    container_name: paralegalai-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  collector_storage:
+  server_storage:

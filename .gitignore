@@ -1,0 +1,29 @@
+# Node
+node_modules/
+coverage/
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files (security)
+.env
+**/.env
+**/.env.*
+server/prisma/.env
+
+# Build / cache
+.dist/
+dist/
+.cache/
+.tmp/
+
+# Editor
+.vscode/
+.idea/
+
+# Misc
+*.db
+*.db-journal
