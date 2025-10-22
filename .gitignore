@@ -1,0 +1,33 @@
+# Node
+node_modules/
+coverage/
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files (security)
+.env
+**/.env
+**/.env.*
+*.env.save
+
+# Storage (excluded from repo)
+storage/
+qdrant_storage/
+
+# Build / cache
+.dist/
+dist/
+.cache/
+.tmp/
+
+# Editor
+.vscode/
+.idea/
+
+# Misc
+*.db
+*.db-journal
